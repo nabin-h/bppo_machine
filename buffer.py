@@ -130,6 +130,20 @@ class OfflineReplayBuffer(OnlineReplayBuffer):
         self._size = len(dataset['actions']) - 1
 
 
+    def load_maintenance_dataset(
+        self, dataset: dict
+    ) -> None:
+        self._state = dataset["observations"]
+        self._action = dataset["actions"]
+        self._reward = dataset["rewards"]
+        self._next_state = dataset["next_observations"]
+        self._next_action = dataset["next_actions"]
+        done = np.logical_or(dataset["terminals"] > 0.5,
+                             dataset["timeouts"] > 0.5).astype(np.float32)
+        self._not_done = 1. - done
+        self._size = len(self._action)
+
+
     def normalize_state(
         self
     ) -> tuple:

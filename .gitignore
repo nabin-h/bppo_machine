@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+
+datasets_*/
+M10 smoke/
+policies/*.pkl

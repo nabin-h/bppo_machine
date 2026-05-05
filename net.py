@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.distributions import Bernoulli
 from torch.distributions import Normal
 from typing import Tuple
 
@@ -92,3 +93,20 @@ class GaussPolicyMLP(nn.Module):
 
         dist = Normal(mu, std)
         return dist
+
+
+class BernoulliPolicyMLP(nn.Module):
+    _net: torch.nn.modules.container.Sequential
+
+    def __init__(
+        self,
+        state_dim: int, hidden_dim: int, depth: int, action_dim: int,
+    ) -> None:
+        super().__init__()
+        self._net = MLP(state_dim, hidden_dim, depth, action_dim, 'none')
+
+    def forward(
+        self, s: torch.Tensor
+    ) -> torch.distributions:
+        logits = self._net(s)
+        return Bernoulli(logits=logits)
