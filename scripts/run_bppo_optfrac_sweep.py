@@ -49,6 +49,7 @@ def build_parser(defaults=None):
     parser.add_argument("--manifest_path", type=str, default=None)
     parser.add_argument("--repo_root", type=str, default=None)
     parser.add_argument("--output_root", type=str, default=None)
+    parser.add_argument("--run_tag_override", type=str, default=None)
     parser.add_argument("--dataset_root", type=str, default=None)
     parser.add_argument("--policy_path", type=str, default=None)
     parser.add_argument("--extra_policy_paths", type=str, default=None)
@@ -203,7 +204,7 @@ def main():
     output_root.mkdir(parents=True, exist_ok=True)
 
     for item in manifest:
-        tag = manifest_tag(item)
+        tag = args.run_tag_override or manifest_tag(item)
         run_dir = output_root / f"MM{item['num_machines']}" / tag
         run_dir.mkdir(parents=True, exist_ok=True)
         cmd = build_command(args, item, run_dir)
