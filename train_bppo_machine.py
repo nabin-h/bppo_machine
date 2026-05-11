@@ -332,28 +332,26 @@ def main():
                 extra_reference_policies=extra_reference_policies,
                 env_name=args.env_name,
             )
-            checkpoint_dir = None
+            checkpoint_dir = str(save_policy_checkpoint(
+                save_dir,
+                step,
+                bppo,
+                mean,
+                std,
+                {
+                    "env_name": args.env_name,
+                    "num_machines": args.num_machines,
+                    "horizon": args.horizon,
+                    "seed": args.seed,
+                    "checkpoint_step": step,
+                    "state_dim": state_dim,
+                    "action_dim": action_dim,
+                    "policy_hidden_dim": args.bppo_hidden_dim,
+                    "policy_depth": args.bppo_depth,
+                    "state_norm": bool(args.is_state_norm),
+                },
+            ))
             is_best = False
-            if step % args.checkpoint_interval == 0 or step == args.bppo_steps:
-                checkpoint_dir = str(save_policy_checkpoint(
-                    save_dir,
-                    step,
-                    bppo,
-                    mean,
-                    std,
-                    {
-                        "env_name": args.env_name,
-                        "num_machines": args.num_machines,
-                        "horizon": args.horizon,
-                        "seed": args.seed,
-                        "checkpoint_step": step,
-                        "state_dim": state_dim,
-                        "action_dim": action_dim,
-                        "policy_hidden_dim": args.bppo_hidden_dim,
-                        "policy_depth": args.bppo_depth,
-                        "state_norm": bool(args.is_state_norm),
-                    },
-                ))
             row = summarize_eval(step, eval_stats, checkpoint_dir=checkpoint_dir, is_best=False)
             eval_history.append(row)
             if float(eval_stats["discounted_cost"]) < best_cost:
