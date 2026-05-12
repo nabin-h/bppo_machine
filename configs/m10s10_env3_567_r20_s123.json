@@ -6,7 +6,7 @@
   "dataset_root": "datasets_m10s10_env3_mix567_r20",
   "policy_path": "policies/M10S10_env3_threshold6_policy.pkl",
   "extra_policy_paths": "policies/M10S10_env3_threshold5_policy.pkl,policies/M10S10_env3_threshold7_policy.pkl",
-  "env_name": "m10s10_env3",
+  "env_name": "env3",
   "seed": 123,
   "horizon": 100,
   "episodes": 100,
