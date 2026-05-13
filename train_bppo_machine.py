@@ -55,9 +55,11 @@ def make_env(num_machines, horizon, seed, env_name):
     return env
 
 
-def summarize_eval(step, eval_stats, checkpoint_dir=None, is_best=False):
+def summarize_eval(step, eval_stats, checkpoint_dir=None, is_best=False, stage=None, cumulative_step=None):
     row = {
+        "stage": stage,
         "step": int(step),
+        "cumulative_step": int(cumulative_step) if cumulative_step is not None else None,
         "return": float(eval_stats["discounted_return"]),
         "return_std": float(eval_stats.get("discounted_return_std", np.nan)),
         "undiscounted_return": float(eval_stats["return"]),
@@ -258,6 +260,10 @@ def main():
     best_payload = None
     best_cost = np.inf
     start_time = time.perf_counter()
+    value_offset = 0
+    q_bc_offset = args.v_steps
+    bc_offset = args.v_steps + args.q_bc_steps
+    bppo_offset = args.v_steps + args.q_bc_steps + args.bc_steps
 
     for step in range(1, args.v_steps + 1):
         value_loss = value.update(replay_buffer)
@@ -265,6 +271,7 @@ def main():
             loss_history.append({
                 "stage": "value",
                 "step": step,
+                "cumulative_step": value_offset + step,
                 "value_loss": float(value_loss),
             })
 
@@ -274,6 +281,7 @@ def main():
             loss_history.append({
                 "stage": "q_bc",
                 "step": step,
+                "cumulative_step": q_bc_offset + step,
                 "q_loss": float(q_loss),
             })
 
@@ -285,6 +293,7 @@ def main():
             loss_history.append({
                 "stage": "bc",
                 "step": step,
+                "cumulative_step": bc_offset + step,
                 "bc_loss": float(bc_loss),
             })
         if step % args.eval_interval == 0 or step == args.bc_steps:
@@ -299,6 +308,16 @@ def main():
                 env_name=args.env_name,
             )
             cost = float(eval_stats["discounted_cost"])
+            eval_history.append(
+                summarize_eval(
+                    step,
+                    eval_stats,
+                    checkpoint_dir=None,
+                    is_best=cost < best_bc_cost,
+                    stage="bc",
+                    cumulative_step=bc_offset + step,
+                )
+            )
             if cost < best_bc_cost:
                 best_bc_cost = cost
                 bc.save(str(best_bc_path))
@@ -318,6 +337,7 @@ def main():
             loss_history.append({
                 "stage": "bppo",
                 "step": step,
+                "cumulative_step": bppo_offset + step,
                 "bppo_loss": float(bppo_loss),
             })
 
@@ -353,6 +373,8 @@ def main():
             ))
             is_best = False
             row = summarize_eval(step, eval_stats, checkpoint_dir=checkpoint_dir, is_best=False)
+            row["stage"] = "bppo"
+            row["cumulative_step"] = bppo_offset + step
             eval_history.append(row)
             if float(eval_stats["discounted_cost"]) < best_cost:
                 best_cost = float(eval_stats["discounted_cost"])
