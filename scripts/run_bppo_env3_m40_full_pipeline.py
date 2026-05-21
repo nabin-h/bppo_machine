@@ -40,7 +40,23 @@ def ensure_dataset(repo_root: Path, num_machines: int, env_name: str, thresholds
         run(cmd, cwd=repo_root)
     if not manifest_path.exists():
         raise FileNotFoundError(f"Expected manifest at {manifest_path}")
-    return manifest_path
+    return manifest_path, tag
+
+
+def ensure_compat_manifest(manifest_path: Path, num_machines: int, tag: str):
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+    if len(manifest) != 1:
+        return manifest_path
+    item = dict(manifest[0])
+    if item.get("dataset_tag") or ("optimal_fraction" in item):
+        return manifest_path
+    item["dataset_tag"] = tag
+    item.setdefault("num_machines", int(num_machines))
+    compat_path = manifest_path.with_name(manifest_path.stem + "_compat.json")
+    with open(compat_path, "w", encoding="utf-8") as f:
+        json.dump([item], f, indent=2)
+    return compat_path
 
 
 def build_config_payload(env_name: str, manifest_path: Path, dataset_root_rel: str, policy_paths, device: str):
@@ -126,7 +142,8 @@ def main():
     generated_config_dir.mkdir(parents=True, exist_ok=True)
 
     policy_paths = ensure_threshold_policies(repo_root, args.num_machines, args.env_name, thresholds, policies_dir, args.force_policies)
-    manifest_path = ensure_dataset(repo_root, args.num_machines, args.env_name, thresholds, args.random_fraction, dataset_root, args.num_episodes, args.sim_timesteps, args.store_timesteps, args.gamma, args.rank_method, args.dataset_seed, args.force_dataset)
+    manifest_path, tag = ensure_dataset(repo_root, args.num_machines, args.env_name, thresholds, args.random_fraction, dataset_root, args.num_episodes, args.sim_timesteps, args.store_timesteps, args.gamma, args.rank_method, args.dataset_seed, args.force_dataset)
+    manifest_path = ensure_compat_manifest(manifest_path, args.num_machines, tag)
 
     config_path = generated_config_dir / "mm40_env3_567_r20_seedruns.json"
     config_payload = build_config_payload(args.env_name, manifest_path, args.dataset_root, policy_paths, args.device)
