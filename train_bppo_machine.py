@@ -143,6 +143,7 @@ def main():
     parser.add_argument("--episodes", type=int, default=100)
     parser.add_argument("--eval_seed", type=int, default=10000)
     parser.add_argument("--discount", type=float, default=0.95)
+    parser.add_argument("--reward_scale", type=float, default=1.0)
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--is_state_norm", action="store_true")
     parser.add_argument("--policy_path", type=str, default=None)
@@ -201,6 +202,7 @@ def main():
     state_dim = int(np.asarray(env.observation_space.sample()).shape[-1])
 
     dataset = load_trajectory_dataset(args.dataset_path)
+    dataset["rewards"] = dataset["rewards"] * float(args.reward_scale)
     replay_buffer = OfflineReplayBuffer(device, state_dim, action_dim, len(dataset["actions"]))
     replay_buffer.load_maintenance_dataset(dataset)
     replay_buffer.compute_return(args.discount)
@@ -242,6 +244,7 @@ def main():
         "threshold": baseline_threshold,
         "env_name": args.env_name,
         "threshold_value": threshold_value,
+        "reward_scale": float(args.reward_scale),
     }
     save_json(save_dir / "baseline_eval.json", baseline_payload)
 
@@ -377,6 +380,7 @@ def main():
                     "policy_hidden_dim": args.bppo_hidden_dim,
                     "policy_depth": args.bppo_depth,
                     "state_norm": bool(args.is_state_norm),
+                    "reward_scale": float(args.reward_scale),
                 },
             ))
             is_best = False
@@ -415,6 +419,7 @@ def main():
         "train_wall_time_sec": total_wall_time,
         "env_name": args.env_name,
         "dataset_path": args.dataset_path,
+        "reward_scale": float(args.reward_scale),
         "v_steps": args.v_steps,
         "q_bc_steps": args.q_bc_steps,
         "bc_steps": args.bc_steps,

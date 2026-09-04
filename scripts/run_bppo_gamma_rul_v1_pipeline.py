@@ -133,7 +133,7 @@ def write_config(
         "repo_root": str(repo_root.resolve()),
         "output_root": str(
             repo_root / "Seed runs" / ENV_NAME / f"M{num_machines}"
-            / "bppo_multiseed"
+            / args.run_label
         ),
         "run_tag_override": run_tag,
         "dataset_root": str(dataset_root.resolve()),
@@ -144,7 +144,9 @@ def write_config(
         "episodes": args.eval_episodes,
         "eval_seed": args.eval_seed,
         "discount": args.discount,
+        "reward_scale": args.reward_scale,
         "device": args.device,
+        "reeval_seed": args.reeval_seed,
         "is_state_norm": args.is_state_norm,
         "v_steps": args.v_steps,
         "v_hidden_dim": args.hidden_dim,
@@ -176,7 +178,9 @@ def write_config(
         "checkpoint_interval": args.checkpoint_interval,
         "log_interval": args.log_interval,
     }
-    config_path = generated_dir / f"M{num_machines}_{ENV_NAME}_bppo.json"
+    config_path = generated_dir / (
+        f"M{num_machines}_{ENV_NAME}_{args.run_label}.json"
+    )
     config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
     return config_path
 
@@ -194,6 +198,9 @@ def main() -> None:
     parser.add_argument("--eval_episodes", type=int, default=100)
     parser.add_argument("--eval_seed", type=int, default=10000)
     parser.add_argument("--reeval_episodes", type=int, default=1000)
+    parser.add_argument("--reeval_seed", type=int, default=0)
+    parser.add_argument("--reward_scale", type=float, default=1.0)
+    parser.add_argument("--run_label", default="bppo_multiseed")
     parser.add_argument("--v_steps", type=int, default=20000)
     parser.add_argument("--q_steps", type=int, default=20000)
     parser.add_argument("--bc_steps", type=int, default=10000)
@@ -239,7 +246,7 @@ def main() -> None:
         )
         output_root = (
             repo_root / "Seed runs" / ENV_NAME / f"M{num_machines}"
-            / "bppo_multiseed"
+            / args.run_label
         )
         command = [
             sys.executable,

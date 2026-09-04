@@ -60,6 +60,7 @@ def build_parser(defaults=None):
     parser.add_argument("--episodes", type=int, default=100)
     parser.add_argument("--eval_seed", type=int, default=10000)
     parser.add_argument("--discount", type=float, default=0.95)
+    parser.add_argument("--reward_scale", type=float, default=1.0)
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--is_state_norm", action="store_true")
 
@@ -153,6 +154,7 @@ def build_command(args, item, run_dir):
         "--episodes", str(args.episodes),
         "--eval_seed", str(args.eval_seed),
         "--discount", str(args.discount),
+        "--reward_scale", str(args.reward_scale),
         "--device", str(args.device),
         "--v_steps", str(args.v_steps),
         "--v_hidden_dim", str(args.v_hidden_dim),

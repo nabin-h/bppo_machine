@@ -84,6 +84,8 @@ def build_reeval_command(
         str(config["horizon"]),
         "--episodes",
         str(reeval_episodes),
+        "--eval_seed",
+        str(config.get("reeval_seed", 0)),
         "--discount",
         str(config["discount"]),
         "--device",
@@ -96,7 +98,14 @@ def build_reeval_command(
     return cmd
 
 
-def aggregate_results(output_root: Path, seeds, num_machines: int, run_tag: str, reeval_episodes: int):
+def aggregate_results(
+    output_root: Path,
+    seeds,
+    num_machines: int,
+    run_tag: str,
+    reeval_episodes: int,
+    reeval_seed: int,
+):
     per_seed = []
     for seed in seeds:
         run_dir = output_root / f"seed_{seed}" / f"MM{num_machines}" / run_tag
@@ -120,10 +129,11 @@ def aggregate_results(output_root: Path, seeds, num_machines: int, run_tag: str,
     summary = {
         "num_machines": int(num_machines),
         "run_tag": str(run_tag),
+        "reevaluation_seed": int(reeval_seed),
         "num_seeds": len(per_seed),
         "seeds": [int(seed) for seed in seeds],
         "metric_definition": (
-            "For each seed, train with the unchanged BPPO configuration; use the "
+            "For each seed, train with the specified BPPO configuration; use the "
             "training-produced best BPPO checkpoint selected by minimum discounted "
             f"evaluation cost; then re-evaluate that checkpoint with {reeval_episodes} episodes."
         ),
@@ -190,7 +200,14 @@ def main():
 
     if not args.skip_reeval:
         print("[JOB] aggregating results")
-        aggregate_results(output_root, seeds, num_machines, run_tag, args.reeval_episodes)
+        aggregate_results(
+            output_root,
+            seeds,
+            num_machines,
+            run_tag,
+            args.reeval_episodes,
+            int(config.get("reeval_seed", 0)),
+        )
         print(f"[JOB] summary written to {output_root / 'summary_multiseed.json'}")
 
 

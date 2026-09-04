@@ -77,6 +77,7 @@ def main():
     parser.add_argument("--num_machines", type=int, required=True)
     parser.add_argument("--horizon", type=int, default=100)
     parser.add_argument("--episodes", type=int, default=500)
+    parser.add_argument("--eval_seed", type=int, default=0)
     parser.add_argument("--discount", type=float, default=0.95)
     parser.add_argument("--policy_path", type=str, default=None)
     parser.add_argument("--extra_policy_paths", type=str, nargs="*", default=None)
@@ -92,7 +93,7 @@ def main():
         num_machines=args.num_machines,
         horizon=args.horizon,
         reward_is_negative_cost=True,
-        seed=0,
+        seed=args.eval_seed,
         env_name=args.env_name,
     )
 
