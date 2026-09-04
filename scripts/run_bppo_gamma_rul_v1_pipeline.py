@@ -161,6 +161,7 @@ def write_config(
         "target_update_freq": 2,
         "tau": 0.005,
         "bc_steps": args.bc_steps,
+        "bc_checkpoint": args.bc_checkpoint,
         "bc_hidden_dim": args.hidden_dim,
         "bc_depth": args.depth,
         "bc_lr": args.learning_rate,
@@ -204,6 +205,7 @@ def main() -> None:
     parser.add_argument("--v_steps", type=int, default=20000)
     parser.add_argument("--q_steps", type=int, default=20000)
     parser.add_argument("--bc_steps", type=int, default=10000)
+    parser.add_argument("--bc_checkpoint", default=None)
     parser.add_argument("--bppo_steps", type=int, default=5000)
     parser.add_argument("--hidden_dim", type=int, default=256)
     parser.add_argument("--depth", type=int, default=2)

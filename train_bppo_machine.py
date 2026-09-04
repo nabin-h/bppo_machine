@@ -164,6 +164,7 @@ def main():
     parser.add_argument("--tau", type=float, default=0.005)
 
     parser.add_argument("--bc_steps", type=int, default=10000)
+    parser.add_argument("--bc_checkpoint", type=str, default=None)
     parser.add_argument("--bc_hidden_dim", type=int, default=256)
     parser.add_argument("--bc_depth", type=int, default=2)
     parser.add_argument("--bc_lr", type=float, default=1e-4)
@@ -271,7 +272,8 @@ def main():
     value_offset = 0
     q_bc_offset = args.v_steps
     bc_offset = args.v_steps + args.q_bc_steps
-    bppo_offset = args.v_steps + args.q_bc_steps + args.bc_steps
+    effective_bc_steps = 0 if args.bc_checkpoint else args.bc_steps
+    bppo_offset = args.v_steps + args.q_bc_steps + effective_bc_steps
 
     for step in range(1, args.v_steps + 1):
         value_loss = value.update(replay_buffer)
@@ -293,43 +295,70 @@ def main():
                 "q_loss": float(q_loss),
             })
 
-    best_bc_path = save_dir / "bc_best.pt"
-    best_bc_cost = np.inf
-    for step in range(1, args.bc_steps + 1):
-        bc_loss = bc.update(replay_buffer)
-        if step % args.log_interval == 0 or step == args.bc_steps:
-            loss_history.append({
-                "stage": "bc",
-                "step": step,
-                "cumulative_step": bc_offset + step,
-                "bc_loss": float(bc_loss),
-            })
-        if step % args.eval_interval == 0 or step == args.bc_steps:
-            bc_policy_fn = make_policy_fn(bc, mean, std, device)
-            env.seed(args.eval_seed)
-            eval_stats = evaluate_policy_fn(
-                bc_policy_fn,
-                env,
-                args.episodes,
-                discount=args.discount,
-                reference_policy=reference_policy,
-                extra_reference_policies=extra_reference_policies,
-                env_name=args.env_name,
+    if args.bc_checkpoint:
+        best_bc_path = Path(args.bc_checkpoint).resolve()
+        if not best_bc_path.exists():
+            raise FileNotFoundError(f"Missing BC checkpoint: {best_bc_path}")
+        bc.load(str(best_bc_path))
+        bc_policy_fn = make_policy_fn(bc, mean, std, device)
+        env.seed(args.eval_seed)
+        eval_stats = evaluate_policy_fn(
+            bc_policy_fn,
+            env,
+            args.episodes,
+            discount=args.discount,
+            reference_policy=reference_policy,
+            extra_reference_policies=extra_reference_policies,
+            env_name=args.env_name,
+        )
+        eval_history.append(
+            summarize_eval(
+                0,
+                eval_stats,
+                checkpoint_dir=str(best_bc_path),
+                is_best=True,
+                stage="bc_reused",
+                cumulative_step=bc_offset,
             )
-            cost = float(eval_stats["discounted_cost"])
-            eval_history.append(
-                summarize_eval(
-                    step,
-                    eval_stats,
-                    checkpoint_dir=None,
-                    is_best=cost < best_bc_cost,
-                    stage="bc",
-                    cumulative_step=bc_offset + step,
+        )
+    else:
+        best_bc_path = save_dir / "bc_best.pt"
+        best_bc_cost = np.inf
+        for step in range(1, args.bc_steps + 1):
+            bc_loss = bc.update(replay_buffer)
+            if step % args.log_interval == 0 or step == args.bc_steps:
+                loss_history.append({
+                    "stage": "bc",
+                    "step": step,
+                    "cumulative_step": bc_offset + step,
+                    "bc_loss": float(bc_loss),
+                })
+            if step % args.eval_interval == 0 or step == args.bc_steps:
+                bc_policy_fn = make_policy_fn(bc, mean, std, device)
+                env.seed(args.eval_seed)
+                eval_stats = evaluate_policy_fn(
+                    bc_policy_fn,
+                    env,
+                    args.episodes,
+                    discount=args.discount,
+                    reference_policy=reference_policy,
+                    extra_reference_policies=extra_reference_policies,
+                    env_name=args.env_name,
                 )
-            )
-            if cost < best_bc_cost:
-                best_bc_cost = cost
-                bc.save(str(best_bc_path))
+                cost = float(eval_stats["discounted_cost"])
+                eval_history.append(
+                    summarize_eval(
+                        step,
+                        eval_stats,
+                        checkpoint_dir=None,
+                        is_best=cost < best_bc_cost,
+                        stage="bc",
+                        cumulative_step=bc_offset + step,
+                    )
+                )
+                if cost < best_bc_cost:
+                    best_bc_cost = cost
+                    bc.save(str(best_bc_path))
 
     bppo.load(str(best_bc_path))
     bppo.set_old_policy()
@@ -423,6 +452,8 @@ def main():
         "v_steps": args.v_steps,
         "q_bc_steps": args.q_bc_steps,
         "bc_steps": args.bc_steps,
+        "bc_steps_executed": effective_bc_steps,
+        "bc_checkpoint": str(best_bc_path) if args.bc_checkpoint else None,
         "bppo_steps": args.bppo_steps,
     })
     if best_payload is None:

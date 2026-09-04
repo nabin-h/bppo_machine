@@ -77,6 +77,7 @@ def build_parser(defaults=None):
     parser.add_argument("--target_update_freq", type=int, default=2)
     parser.add_argument("--tau", type=float, default=0.005)
     parser.add_argument("--bc_steps", type=int, default=10000)
+    parser.add_argument("--bc_checkpoint", type=str, default=None)
     parser.add_argument("--bc_hidden_dim", type=int, default=256)
     parser.add_argument("--bc_depth", type=int, default=2)
     parser.add_argument("--bc_lr", type=float, default=1e-4)
@@ -188,6 +189,8 @@ def build_command(args, item, run_dir):
     ]
     if args.policy_path:
         cmd.extend(["--policy_path", str(args.policy_path)])
+    if args.bc_checkpoint:
+        cmd.extend(["--bc_checkpoint", str(args.bc_checkpoint)])
     if args.extra_policy_paths:
         cmd.extend(["--extra_policy_paths", str(args.extra_policy_paths)])
     if args.is_state_norm:
