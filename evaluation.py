@@ -21,6 +21,13 @@ def reference_action_for_state(reference_policy, state_key, action_dim: int) -> 
         threshold = int(reference_policy.get('threshold', 2))
         component_state_key = tuple(state_key[:action_dim])
         return np.asarray([1 if int(s) >= threshold else 0 for s in component_state_key], dtype=np.int32)
+    if policy_type == 'opportunity_two_threshold':
+        trigger = int(reference_policy['trigger'])
+        opportunity_threshold = int(reference_policy['opportunity_threshold'])
+        component_states = np.asarray(state_key[:action_dim], dtype=np.int32)
+        if np.any(component_states >= trigger):
+            return (component_states >= opportunity_threshold).astype(np.int32)
+        return np.zeros(action_dim, dtype=np.int32)
     policy_table = reference_policy.get('policy', {}) if isinstance(reference_policy, dict) else reference_policy
     if state_key in policy_table:
         return np.asarray(policy_table.get(state_key, (0,) * action_dim), dtype=np.int32)
@@ -32,9 +39,13 @@ def _reference_suffix(label: str, policy) -> Optional[str]:
     if label == "__main__":
         if isinstance(policy, dict) and policy.get("policy_type") == "component_threshold":
             return f"t{int(policy.get('threshold', 2))}"
+        if isinstance(policy, dict) and policy.get("policy_type") == "opportunity_two_threshold":
+            return f"t{int(policy['trigger'])}_o{int(policy['opportunity_threshold'])}"
         return None
     if isinstance(policy, dict) and policy.get("policy_type") == "component_threshold":
         return f"t{int(policy.get('threshold', 2))}"
+    if isinstance(policy, dict) and policy.get("policy_type") == "opportunity_two_threshold":
+        return f"t{int(policy['trigger'])}_o{int(policy['opportunity_threshold'])}"
     return label
 
 

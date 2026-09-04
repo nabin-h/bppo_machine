@@ -58,6 +58,7 @@ def build_parser(defaults=None):
     parser.add_argument("--seed", type=int, default=123)
     parser.add_argument("--horizon", type=int, default=100)
     parser.add_argument("--episodes", type=int, default=100)
+    parser.add_argument("--eval_seed", type=int, default=10000)
     parser.add_argument("--discount", type=float, default=0.95)
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--is_state_norm", action="store_true")
@@ -150,6 +151,7 @@ def build_command(args, item, run_dir):
         "--num_machines", str(item["num_machines"]),
         "--horizon", str(args.horizon),
         "--episodes", str(args.episodes),
+        "--eval_seed", str(args.eval_seed),
         "--discount", str(args.discount),
         "--device", str(args.device),
         "--v_steps", str(args.v_steps),

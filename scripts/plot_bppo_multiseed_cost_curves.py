@@ -20,12 +20,13 @@ def find_selected_step(summary: dict, seed: int):
 
 def plot_cost_curves(output_root: Path, summary: dict, output_dir: Path, run_tag: str):
     seeds = [int(seed) for seed in summary["seeds"]]
+    num_machines = int(summary["num_machines"])
     fig, axes = plt.subplots(1, len(seeds), figsize=(5.2 * len(seeds), 4.2), sharey=True)
     if len(seeds) == 1:
         axes = [axes]
 
     for ax, seed in zip(axes, seeds):
-        run_dir = output_root / f"seed_{seed}" / "MM40" / run_tag
+        run_dir = output_root / f"seed_{seed}" / f"MM{num_machines}" / run_tag
         eval_rows = [row for row in load_json(run_dir / f"{seed}_eval.json") if row.get("stage") == "bppo"]
         x = np.asarray([int(row["step"]) for row in eval_rows], dtype=np.float64)
         y = np.asarray([float(row["cost"]) for row in eval_rows], dtype=np.float64)
@@ -58,7 +59,7 @@ def main():
     parser.add_argument("--output_root", type=str, required=True)
     parser.add_argument("--summary_json", type=str, default=None)
     parser.add_argument("--output_dir", type=str, default=None)
-    parser.add_argument("--run_tag", type=str, default="mix_t567_e_r20")
+    parser.add_argument("--run_tag", type=str, default=None)
     args = parser.parse_args()
 
     output_root = Path(args.output_root)
@@ -67,7 +68,8 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     summary = load_json(summary_json)
-    plot_cost_curves(output_root, summary, output_dir, args.run_tag)
+    run_tag = args.run_tag or str(summary["run_tag"])
+    plot_cost_curves(output_root, summary, output_dir, run_tag)
     print(output_dir)
 
 

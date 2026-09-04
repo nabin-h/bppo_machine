@@ -26,6 +26,8 @@ def load_extra_reference_policies(raw_paths):
         policy = load_reference_policy(policy_path)
         if isinstance(policy, dict) and policy.get("policy_type") == "component_threshold":
             label = f"t{int(policy.get('threshold', 2))}"
+        elif isinstance(policy, dict) and policy.get("policy_type") == "opportunity_two_threshold":
+            label = f"t{int(policy['trigger'])}_o{int(policy['opportunity_threshold'])}"
         else:
             label = Path(policy_path).stem
         extra_reference_policies[label] = policy

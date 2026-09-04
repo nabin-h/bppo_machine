@@ -118,6 +118,8 @@ def aggregate_results(output_root: Path, seeds, num_machines: int, run_tag: str,
     cost_means = [row["reeval_discounted_cost_mean"] for row in per_seed]
     return_means = [row["reeval_discounted_return_mean"] for row in per_seed]
     summary = {
+        "num_machines": int(num_machines),
+        "run_tag": str(run_tag),
         "num_seeds": len(per_seed),
         "seeds": [int(seed) for seed in seeds],
         "metric_definition": (

@@ -35,6 +35,8 @@ def load_extra_reference_policies(raw_paths):
         policy = load_reference_policy(policy_path)
         if isinstance(policy, dict) and policy.get("policy_type") == "component_threshold":
             label = f"t{int(policy.get('threshold', 2))}"
+        elif isinstance(policy, dict) and policy.get("policy_type") == "opportunity_two_threshold":
+            label = f"t{int(policy['trigger'])}_o{int(policy['opportunity_threshold'])}"
         else:
             label = Path(policy_path).stem
         extra_reference_policies[label] = policy
@@ -139,6 +141,7 @@ def main():
     parser.add_argument("--num_machines", type=int, required=True)
     parser.add_argument("--horizon", type=int, default=100)
     parser.add_argument("--episodes", type=int, default=100)
+    parser.add_argument("--eval_seed", type=int, default=10000)
     parser.add_argument("--discount", type=float, default=0.95)
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--is_state_norm", action="store_true")
@@ -197,7 +200,7 @@ def main():
     action_dim = int(np.asarray(env.action_space.sample()).shape[-1])
     state_dim = int(np.asarray(env.observation_space.sample()).shape[-1])
 
-    dataset = load_trajectory_dataset(args.dataset_path, reward_is_negative_cost=True)
+    dataset = load_trajectory_dataset(args.dataset_path)
     replay_buffer = OfflineReplayBuffer(device, state_dim, action_dim, len(dataset["actions"]))
     replay_buffer.load_maintenance_dataset(dataset)
     replay_buffer.compute_return(args.discount)
@@ -214,6 +217,7 @@ def main():
         reference_policy.get("threshold", get_env_spec(args.env_name)["threshold"])
     ) if reference_policy else int(get_env_spec(args.env_name)["threshold"])
 
+    env.seed(args.eval_seed)
     baseline_random = evaluate_policy_fn(
         lambda obs: random_viable_action(obs, env_name=args.env_name),
         env,
@@ -223,6 +227,7 @@ def main():
         extra_reference_policies=extra_reference_policies,
         env_name=args.env_name,
     )
+    env.seed(args.eval_seed)
     baseline_threshold = evaluate_policy_fn(
         lambda obs: threshold_policy(obs, threshold=threshold_value, env_name=args.env_name),
         env,
@@ -298,6 +303,7 @@ def main():
             })
         if step % args.eval_interval == 0 or step == args.bc_steps:
             bc_policy_fn = make_policy_fn(bc, mean, std, device)
+            env.seed(args.eval_seed)
             eval_stats = evaluate_policy_fn(
                 bc_policy_fn,
                 env,
@@ -343,6 +349,7 @@ def main():
 
         if step % args.eval_interval == 0 or step == args.bppo_steps:
             policy_fn = make_policy_fn(bppo, mean, std, device)
+            env.seed(args.eval_seed)
             eval_stats = evaluate_policy_fn(
                 policy_fn,
                 env,
@@ -363,6 +370,7 @@ def main():
                     "num_machines": args.num_machines,
                     "horizon": args.horizon,
                     "seed": args.seed,
+                    "eval_seed": args.eval_seed,
                     "checkpoint_step": step,
                     "state_dim": state_dim,
                     "action_dim": action_dim,

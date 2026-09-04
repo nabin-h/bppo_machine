@@ -40,6 +40,38 @@ _M10S10_P = np.array(
     dtype=np.float32,
 )
 
+_GAMMA_RUL_P = np.array(
+    [
+        [0.911792568083927, 0.08626750556593676, 0.001856691563573154, 7.916261159657267e-05, 3.860117807508168e-06, 2.005989783171458e-07, 1.0823697271789001e-08, 5.987301765486563e-10, 3.371192214274288e-11, 2.0413670753782753e-12],
+        [0.0, 0.911792568083927, 0.08626750556593676, 0.001856691563573154, 7.916261159657267e-05, 3.860117807508168e-06, 2.005989783171458e-07, 1.0823697271789001e-08, 5.987301765486563e-10, 3.5753289218121154e-11],
+        [0.0, 0.0, 0.911792568083927, 0.08626750556593676, 0.001856691563573154, 7.916261159657267e-05, 3.860117807508168e-06, 2.005989783171458e-07, 1.0823697271789001e-08, 6.344834657667775e-10],
+        [0.0, 0.0, 0.0, 0.911792568083927, 0.08626750556593676, 0.001856691563573154, 7.916261159657267e-05, 3.860117807508168e-06, 2.005989783171458e-07, 1.1458180737555779e-08],
+        [0.0, 0.0, 0.0, 0.0, 0.911792568083927, 0.08626750556593676, 0.001856691563573154, 7.916261159657267e-05, 3.860117807508168e-06, 2.1205715905470157e-07],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.911792568083927, 0.08626750556593676, 0.001856691563573154, 7.916261159657267e-05, 4.072174966562869e-06],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.911792568083927, 0.08626750556593676, 0.001856691563573154, 8.323478656313554e-05],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.911792568083927, 0.08626750556593676, 0.0019399263501362896],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.911792568083927, 0.08820743191607305],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+    ],
+    dtype=np.float64,
+)
+
+_GAMMA_RUL_EXPECTED_LIFE = np.array(
+    [
+        99.99999999990796,
+        88.91781209589504,
+        77.83562419184308,
+        66.75343628703588,
+        55.671248367147676,
+        44.589060132535316,
+        33.50686488821598,
+        22.424496217270452,
+        11.33691320875856,
+        0.0,
+    ],
+    dtype=np.float64,
+)
+
 ENV_SPECS: Dict[str, Dict[str, object]] = {
     DEFAULT_ENV_NAME: {
         "state_values": np.array([0, 1, 2, 3], dtype=np.int32),
@@ -133,6 +165,35 @@ ENV_SPECS: Dict[str, Dict[str, object]] = {
         "operating_reward_intercept": 0.0,
         "operating_reward_slope": 3.0,
     },
+    "gamma_rul_v1": {
+        "state_values": np.arange(10, dtype=np.int32),
+        "failed_state": 9,
+        "transition_no_maintenance": _GAMMA_RUL_P,
+        "cpm_mode": "remaining_life",
+        "cpm_base": 60.0,
+        "cpm_rul_rate": 0.6,
+        "expected_remaining_life": _GAMMA_RUL_EXPECTED_LIFE,
+        "ccm": 120.0,
+        "cs": 80.0,
+        "threshold": 8,
+        "opportunity_trigger": 8,
+        "opportunity_threshold": 6,
+        "enforce_zero_no_maintenance": True,
+        "operating_reward_intercept": 0.0,
+        "operating_reward_slope": 1.0,
+        "initialization_mode": "threshold_burnin",
+        "initialization_thresholds": (5, 6, 7),
+        "initialization_burnin_steps": 500,
+        "vectorized_component_transitions": True,
+        "degradation_model": {
+            "type": "stationary_gamma_process_discretization",
+            "shape_rate": 0.25,
+            "scale": 0.3609395576619267,
+            "failure_threshold": 9.0,
+            "time_step": 1.0,
+            "target_mttf": 100.0,
+        },
+    },
     "m10s10_industrial": {
         "state_values": np.arange(10, dtype=np.int32),
         "failed_state": 9,
@@ -157,6 +218,7 @@ ENV_SPECS: Dict[str, Dict[str, object]] = {
 }
 
 S = np.array(ENV_SPECS[DEFAULT_ENV_NAME]["state_values"], copy=True)
+_BURNIN_DISTRIBUTION_CACHE: Dict[Tuple[str, int, int], np.ndarray] = {}
 
 
 def get_env_spec(env_name: str = DEFAULT_ENV_NAME) -> Dict[str, object]:
@@ -222,7 +284,36 @@ def sample_initial_observation(
 ) -> np.ndarray:
     spec = get_env_spec(env_name)
     rng = np.random if rng is None else rng
-    component_states = rng.choice(get_state_values(env_name), size=num_machines).astype(np.int32)
+    initialization_mode = str(spec.get("initialization_mode", "uniform"))
+    if initialization_mode == "uniform":
+        component_states = rng.choice(
+            get_state_values(env_name), size=num_machines
+        ).astype(np.int32)
+    elif initialization_mode == "threshold_burnin":
+        thresholds = np.asarray(spec["initialization_thresholds"], dtype=np.int32)
+        threshold = int(rng.choice(thresholds))
+        burnin_steps = int(spec["initialization_burnin_steps"])
+        cache_key = (env_name, threshold, burnin_steps)
+        distribution = _BURNIN_DISTRIBUTION_CACHE.get(cache_key)
+        if distribution is None:
+            transition = np.asarray(
+                spec["transition_no_maintenance"], dtype=np.float64
+            )
+            policy_transition = transition.copy()
+            reset_row = np.zeros(transition.shape[1], dtype=np.float64)
+            reset_row[0] = 1.0
+            policy_transition[threshold:] = reset_row
+            distribution = np.zeros(transition.shape[0], dtype=np.float64)
+            distribution[0] = 1.0
+            for _ in range(burnin_steps):
+                distribution = distribution @ policy_transition
+            distribution /= distribution.sum()
+            _BURNIN_DISTRIBUTION_CACHE[cache_key] = distribution
+        component_states = rng.choice(
+            get_state_values(env_name), size=num_machines, p=distribution
+        ).astype(np.int32)
+    else:
+        raise ValueError(f"Unsupported initialization_mode='{initialization_mode}'")
     if not _uses_window_phase(spec):
         return component_states
     period = int(spec["window_period"])
@@ -297,6 +388,12 @@ def _preventive_cost(states_arr: np.ndarray, spec: Dict[str, object]) -> np.ndar
         return float(spec["cpm_base"]) + float(spec["cpm_slope"]) * states_arr.astype(np.float32)
     if mode == "constant":
         return np.full(states_arr.shape, float(spec["cpm_constant"]), dtype=np.float32)
+    if mode == "remaining_life":
+        remaining_life = np.asarray(spec["expected_remaining_life"], dtype=np.float64)
+        return (
+            float(spec["cpm_base"])
+            + float(spec["cpm_rul_rate"]) * remaining_life[states_arr]
+        )
     raise ValueError(f"Unsupported cpm_mode='{mode}'")
 
 
@@ -327,14 +424,32 @@ def take_step(
     component_states, phase = split_observation(states, env_name=env_name)
     actions_arr = project_action(states, actions, env_name=env_name)
     state_values = np.asarray(spec["state_values"], dtype=np.int32)
-    transition_no_maintenance = np.asarray(spec["transition_no_maintenance"], dtype=np.float32)
+    transition_dtype = (
+        np.float64
+        if bool(spec.get("vectorized_component_transitions", False))
+        else np.float32
+    )
+    transition_no_maintenance = np.asarray(
+        spec["transition_no_maintenance"], dtype=transition_dtype
+    )
 
-    next_states = []
-    for state, action in zip(component_states, actions_arr):
-        if action == 1:
-            next_states.append(0)
-        else:
-            next_states.append(rng.choice(state_values, p=transition_no_maintenance[state]))
+    if bool(spec.get("vectorized_component_transitions", False)):
+        state_cdf = np.cumsum(transition_no_maintenance[component_states], axis=1)
+        state_cdf[:, -1] = 1.0
+        uniforms = rng.random_sample(component_states.shape[0])
+        no_maintenance_next = np.sum(
+            uniforms[:, np.newaxis] > state_cdf, axis=1
+        ).astype(np.int32)
+        next_states = np.where(actions_arr == 1, 0, no_maintenance_next)
+    else:
+        next_states = []
+        for state, action in zip(component_states, actions_arr):
+            if action == 1:
+                next_states.append(0)
+            else:
+                next_states.append(
+                    rng.choice(state_values, p=transition_no_maintenance[state])
+                )
     cost = cost_function(states, actions_arr, env_name=env_name)
     next_phase = _next_window_phase(phase, spec)
     return make_observation(next_states, next_phase, env_name=env_name), cost
@@ -372,6 +487,32 @@ def threshold_policy(
     actions = np.asarray(
         [1 if int(state) >= threshold_value else 0 for state in component_states],
         dtype=np.int32,
+    )
+    return project_action(states, actions, env_name=env_name)
+
+
+def opportunity_threshold_policy(
+    states: Sequence[int],
+    trigger: Optional[int] = None,
+    opportunity_threshold: Optional[int] = None,
+    env_name: str = DEFAULT_ENV_NAME,
+) -> np.ndarray:
+    spec = get_env_spec(env_name)
+    trigger_value = int(
+        spec.get("opportunity_trigger", spec["threshold"])
+        if trigger is None else trigger
+    )
+    opportunity_value = int(
+        spec.get("opportunity_threshold", trigger_value)
+        if opportunity_threshold is None else opportunity_threshold
+    )
+    if opportunity_value > trigger_value:
+        raise ValueError("opportunity_threshold must not exceed trigger")
+    component_states, _ = split_observation(states, env_name=env_name)
+    has_trigger = bool(np.any(component_states >= trigger_value))
+    actions = (
+        (component_states >= opportunity_value).astype(np.int32)
+        if has_trigger else np.zeros(component_states.shape[0], dtype=np.int32)
     )
     return project_action(states, actions, env_name=env_name)
 
@@ -471,6 +612,15 @@ def named_policy(
     if policy_name.startswith("component_threshold_t"):
         threshold = int(policy_name.split("component_threshold_t", 1)[1])
         return threshold_policy(states, threshold=threshold, env_name=env_name)
+    if policy_name.startswith("opportunity_t"):
+        suffix = policy_name.split("opportunity_t", 1)[1]
+        trigger_raw, opportunity_raw = suffix.split("_o", 1)
+        return opportunity_threshold_policy(
+            states,
+            trigger=int(trigger_raw),
+            opportunity_threshold=int(opportunity_raw),
+            env_name=env_name,
+        )
     if policy_name.startswith("train_priority_t"):
         threshold = int(policy_name.split("train_priority_t", 1)[1])
         return train_priority_threshold_policy(states, threshold=threshold, env_name=env_name)

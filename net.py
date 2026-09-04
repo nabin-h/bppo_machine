@@ -43,7 +43,7 @@ class ValueMLP(nn.Module):
         self, state_dim: int, hidden_dim: int, depth: int
     ) -> None:
         super().__init__()
-        self._net = MLP(state_dim, hidden_dim, depth, 1, 'relu')
+        self._net = MLP(state_dim, hidden_dim, depth, 1, 'none')
 
     def forward(
         self, s: torch.Tensor
@@ -60,7 +60,7 @@ class QMLP(nn.Module):
         state_dim: int, action_dim: int, hidden_dim: int, depth:int
     ) -> None:
         super().__init__()
-        self._net = MLP((state_dim + action_dim), hidden_dim, depth, 1, 'relu')
+        self._net = MLP((state_dim + action_dim), hidden_dim, depth, 1, 'none')
 
     def forward(
         self, s: torch.Tensor, a: torch.Tensor
