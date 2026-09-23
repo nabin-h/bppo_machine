@@ -5,9 +5,16 @@ import json
 import statistics
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
-from scripts.gamma_v3_experiment import parse_csv, prepare_study, write_json
+from scripts.gamma_v3_experiment import (
+    dataset_files,
+    environment_name,
+    parse_csv,
+    prepare_study,
+    write_json,
+)
 
 
 def run(command: list[str], repo_root: Path) -> None:
@@ -20,6 +27,29 @@ def summarize(values: list[float]) -> dict[str, float]:
         "mean": float(statistics.mean(values)),
         "sample_std": float(statistics.stdev(values)) if len(values) > 1 else 0.0,
     }
+
+
+def load_completed_summary(output_root: Path, seeds: list[int]) -> dict | None:
+    summary_path = output_root / "summary.json"
+    if not summary_path.exists():
+        return None
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    completed_seeds = sorted(int(row["seed"]) for row in summary.get("per_seed", []))
+    return summary if completed_seeds == sorted(seeds) else None
+
+
+def write_missing_log(
+    path: Path,
+    dt_repo: Path,
+    missing_studies: list[dict],
+) -> None:
+    write_json(path, {
+        "method": "BPPO",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "dt_repo": str(dt_repo),
+        "missing_count": len(missing_studies),
+        "missing_studies": missing_studies,
+    })
 
 
 def main() -> None:
@@ -49,6 +79,8 @@ def main() -> None:
     parser.add_argument("--checkpoint_interval", type=int, default=500)
     parser.add_argument("--prepare_only", action="store_true")
     parser.add_argument("--skip_train", action="store_true")
+    parser.add_argument("--skip_missing_datasets", action="store_true")
+    parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent
@@ -59,27 +91,64 @@ def main() -> None:
     modes = parse_csv(args.modes)
     seeds = parse_csv(args.seeds, int)
     suite_rows = []
+    comparison_root = repo_root / "Seed runs" / "gamma_v3_comparison"
+    missing_log_path = comparison_root / "bppo_missing_datasets.json"
+    missing_studies = []
+    write_missing_log(missing_log_path, dt_repo, missing_studies)
 
     for machine_type in machine_types:
         for setup_cost in setup_costs:
             for num_machines in machine_counts:
                 for mode in modes:
-                    study = prepare_study(
-                        repo_root,
-                        dt_repo,
-                        machine_type,
-                        setup_cost,
-                        num_machines,
-                        mode,
-                        args.num_episodes,
-                        args.horizon,
-                        args.discount,
-                        args.dataset_seed,
-                    )
+                    env_name = environment_name(machine_type, setup_cost, num_machines)
                     output_root = (
-                        repo_root / "Seed runs" / "gamma_v3_comparison"
-                        / study.env_name / f"M{num_machines}" / mode / "bppo"
+                        comparison_root / env_name / f"M{num_machines}" / mode / "bppo"
                     )
+                    if args.resume:
+                        completed = load_completed_summary(output_root, seeds)
+                        if completed is not None:
+                            print(f"[RESUME] already complete: {output_root}", flush=True)
+                            suite_rows.append(completed)
+                            continue
+
+                    try:
+                        study = prepare_study(
+                            repo_root,
+                            dt_repo,
+                            machine_type,
+                            setup_cost,
+                            num_machines,
+                            mode,
+                            args.num_episodes,
+                            args.horizon,
+                            args.discount,
+                            args.dataset_seed,
+                        )
+                    except FileNotFoundError as error:
+                        if not args.skip_missing_datasets:
+                            raise
+                        dataset_path, metadata_path = dataset_files(
+                            dt_repo, env_name, num_machines, mode, args.num_episodes
+                        )
+                        missing_paths = [
+                            str(path.resolve())
+                            for path in (dataset_path, metadata_path)
+                            if not path.exists()
+                        ]
+                        missing_studies.append({
+                            "machine_type": machine_type,
+                            "setup_cost_per_machine": setup_cost,
+                            "num_machines": num_machines,
+                            "mode": mode,
+                            "environment": env_name,
+                            "dataset_path": str(dataset_path.resolve()),
+                            "metadata_path": str(metadata_path.resolve()),
+                            "missing_paths": missing_paths,
+                            "reason": str(error),
+                        })
+                        write_missing_log(missing_log_path, dt_repo, missing_studies)
+                        print(f"[SKIP MISSING] {env_name} M{num_machines} {mode}", flush=True)
+                        continue
                     prep = {
                         "method": "BPPO",
                         "environment": study.env_name,
@@ -199,11 +268,11 @@ def main() -> None:
 
     if suite_rows:
         write_json(
-            repo_root / "Seed runs" / "gamma_v3_comparison" / "bppo_suite_summary.json",
+            comparison_root / "bppo_suite_summary.json",
             {"method": "BPPO", "studies": suite_rows},
         )
+    write_missing_log(missing_log_path, dt_repo, missing_studies)
 
 
 if __name__ == "__main__":
     main()
-
