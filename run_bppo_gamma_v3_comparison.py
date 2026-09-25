@@ -67,6 +67,7 @@ def main() -> None:
     parser.add_argument("--dataset_seed", type=int, default=42)
     parser.add_argument("--seeds", default="123")
     parser.add_argument("--eval_episodes", type=int, default=25)
+    parser.add_argument("--eval_seed", type=int, default=10000)
     parser.add_argument("--reeval_episodes", type=int, default=200)
     parser.add_argument("--reeval_seed", type=int, default=20000)
     parser.add_argument("--device", default="cuda")
@@ -159,6 +160,8 @@ def main() -> None:
                         "dataset_path": str(study.dataset_path),
                         "metadata_path": str(study.metadata_path),
                         "training_seeds": seeds,
+                        "checkpoint_eval_seed": args.eval_seed,
+                        "checkpoint_eval_episodes": args.eval_episodes,
                     }
                     write_json(output_root / "experiment_spec.json", prep)
                     if args.prepare_only:
@@ -179,7 +182,7 @@ def main() -> None:
                                 "--num_machines", str(num_machines),
                                 "--horizon", str(args.horizon),
                                 "--episodes", str(args.eval_episodes),
-                                "--eval_seed", str(args.reeval_seed),
+                                "--eval_seed", str(args.eval_seed),
                                 "--discount", str(args.discount),
                                 "--reward_scale", str(args.reward_scale),
                                 "--device", args.device,
