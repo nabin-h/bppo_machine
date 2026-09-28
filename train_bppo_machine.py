@@ -331,6 +331,13 @@ def main():
     effective_q_steps = 0 if args.q_checkpoint else args.q_bc_steps
     effective_bc_steps = 0 if args.bc_checkpoint else args.bc_steps
     bppo_offset = args.v_steps + args.q_bc_steps + args.bc_steps
+    stage_status = {
+        "value": {"completed": False, "configured_steps": args.v_steps},
+        "q": {"completed": False, "configured_steps": args.q_bc_steps},
+        "bc": {"completed": False, "configured_steps": args.bc_steps},
+        "bppo": {"completed": False, "configured_steps": args.bppo_steps},
+    }
+    save_json(save_dir / "stage_status.json", stage_status)
 
     if args.value_checkpoint:
         value_path = Path(args.value_checkpoint).resolve()
@@ -349,6 +356,12 @@ def main():
                     "value_loss": float(value_loss),
                 })
         value.save(str(value_path))
+    stage_status["value"].update({
+        "completed": True,
+        "executed_steps": effective_v_steps,
+        "checkpoint": str(value_path),
+    })
+    save_json(save_dir / "stage_status.json", stage_status)
 
     if args.q_checkpoint:
         q_path = Path(args.q_checkpoint).resolve()
@@ -367,6 +380,12 @@ def main():
                     "q_loss": float(q_loss),
                 })
         q_bc.save(str(q_path))
+    stage_status["q"].update({
+        "completed": True,
+        "executed_steps": effective_q_steps,
+        "checkpoint": str(q_path),
+    })
+    save_json(save_dir / "stage_status.json", stage_status)
 
     if args.bc_checkpoint:
         best_bc_path = Path(args.bc_checkpoint).resolve()
@@ -432,6 +451,13 @@ def main():
                 if cost < best_bc_cost:
                     best_bc_cost = cost
                     bc.save(str(best_bc_path))
+
+    stage_status["bc"].update({
+        "completed": True,
+        "executed_steps": effective_bc_steps,
+        "checkpoint": str(best_bc_path),
+    })
+    save_json(save_dir / "stage_status.json", stage_status)
 
     bppo.load(str(best_bc_path))
     bppo.set_old_policy()
@@ -533,6 +559,13 @@ def main():
             row["stage"] = "bppo"
             row["cumulative_step"] = bppo_offset + step
             eval_history.append(row)
+
+    stage_status["bppo"].update({
+        "completed": True,
+        "executed_steps": args.bppo_steps,
+        "selected_checkpoint": best_payload["checkpoint_dir"],
+    })
+    save_json(save_dir / "stage_status.json", stage_status)
 
     total_wall_time = time.perf_counter() - start_time
     save_json(save_dir / f"{args.seed}_loss.json", loss_history)

@@ -26,12 +26,12 @@ Use `--prepare_only` to validate inputs and write the complete tuning specificat
 
 ## Full comparison after freezing hyperparameters
 
-The full runner also defaults to the faithful budgets, architectures, decay controls, and per-update BPPO evaluation:
+The frozen full-suite runner fixes the tuning winner (`clip_ratio=0.25`, `decay=0.96`) and runs all 16 combinations of machine type, system size, setup cost, and dataset type:
 
 ```text
-python run_bppo_gamma_v3_comparison.py --machine_types heterogeneous --setup_cost_per_machine 25 --num_machines 20 --modes plausible --seeds 123 --device cuda --resume
+python scripts\run_gamma_v3_bppo_faithful_full.py --device cuda --resume --skip_missing_datasets
 ```
 
-It uses the exact datasets in the sibling `dt_machine` repository and validates environment name, system size, horizon, discount, dataset seed, setup cost, and reward convention. The training-selected checkpoint is independently evaluated for 200 episodes with seed 20000. Results are written below `Seed runs/gamma_v3_comparison`.
+It uses the exact datasets in the sibling `dt_machine` repository and validates environment name, system size, horizon, discount, dataset seed, setup cost, and reward convention before training. Both the author-style selected checkpoint and the final step-1000 checkpoint are independently evaluated for 200 episodes with seed 20000. The selected checkpoint is the primary reported result.
 
-To continue a suite when some DT datasets are absent, add `--skip_missing_datasets --resume`. Missing inputs are recorded in `Seed runs/gamma_v3_comparison/bppo_missing_datasets.json`.
+Results are isolated below `Seed runs/gamma_v3_bppo_faithful_full`. With `--resume`, completed studies are skipped; interrupted runs reuse completed value, Q, and BC stages and restart only the short BPPO stage when necessary. With `--skip_missing_datasets`, missing inputs are recorded in `missing_datasets.json` and the remaining studies continue.
