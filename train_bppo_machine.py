@@ -78,6 +78,18 @@ def summarize_eval(step, eval_stats, checkpoint_dir=None, is_best=False, stage=N
         "action_activation_rate_std": float(eval_stats.get("action_activation_rate_std", np.nan)),
         "corrections": float(eval_stats.get("corrections", np.nan)),
         "corrections_std": float(eval_stats.get("corrections_std", np.nan)),
+        "forced_failure_corrections": float(eval_stats.get("forced_failure_corrections", np.nan)),
+        "forced_failure_corrections_std": float(eval_stats.get("forced_failure_corrections_std", np.nan)),
+        "forced_failure_correction_rate": float(eval_stats.get("forced_failure_correction_rate", np.nan)),
+        "forced_failure_correction_rate_std": float(eval_stats.get("forced_failure_correction_rate_std", np.nan)),
+        "suppressed_zero_state_corrections": float(eval_stats.get("suppressed_zero_state_corrections", np.nan)),
+        "suppressed_zero_state_corrections_std": float(eval_stats.get("suppressed_zero_state_corrections_std", np.nan)),
+        "suppressed_zero_state_correction_rate": float(eval_stats.get("suppressed_zero_state_correction_rate", np.nan)),
+        "suppressed_zero_state_correction_rate_std": float(eval_stats.get("suppressed_zero_state_correction_rate_std", np.nan)),
+        "other_corrections": float(eval_stats.get("other_corrections", np.nan)),
+        "other_corrections_std": float(eval_stats.get("other_corrections_std", np.nan)),
+        "other_correction_rate": float(eval_stats.get("other_correction_rate", np.nan)),
+        "other_correction_rate_std": float(eval_stats.get("other_correction_rate_std", np.nan)),
         "raw_invalid_action_count": float(eval_stats.get("raw_invalid_action_count", np.nan)),
         "raw_invalid_action_count_std": float(eval_stats.get("raw_invalid_action_count_std", np.nan)),
         "raw_invalid_action_rate": float(eval_stats.get("raw_invalid_action_rate", np.nan)),
@@ -117,6 +129,26 @@ def save_policy_checkpoint(base_dir: Path, step: int, policy, mean, std, metadat
     return ckpt_dir
 
 
+def policy_checkpoint_metadata(args, step, state_dim, action_dim):
+    return {
+        "env_name": args.env_name,
+        "num_machines": args.num_machines,
+        "horizon": args.horizon,
+        "seed": args.seed,
+        "eval_seed": args.eval_seed,
+        "checkpoint_step": int(step),
+        "state_dim": state_dim,
+        "action_dim": action_dim,
+        "policy_hidden_dim": args.bppo_hidden_dim,
+        "policy_depth": args.bppo_depth,
+        "state_norm": bool(args.is_state_norm),
+        "reward_scale": float(args.reward_scale),
+        "clip_ratio": float(args.clip_ratio),
+        "decay": float(args.decay),
+        "omega": float(args.omega),
+    }
+
+
 def make_policy_fn(policy, mean, std, device):
     mean_arr = np.asarray(mean, dtype=np.float32)
     std_arr = np.asarray(std, dtype=np.float32)
@@ -140,7 +172,7 @@ def main():
     parser.add_argument("--env_name", type=str, default=DEFAULT_ENV_NAME)
     parser.add_argument("--num_machines", type=int, required=True)
     parser.add_argument("--horizon", type=int, default=100)
-    parser.add_argument("--episodes", type=int, default=100)
+    parser.add_argument("--episodes", type=int, default=10)
     parser.add_argument("--eval_seed", type=int, default=10000)
     parser.add_argument("--discount", type=float, default=0.95)
     parser.add_argument("--reward_scale", type=float, default=1.0)
@@ -149,29 +181,31 @@ def main():
     parser.add_argument("--policy_path", type=str, default=None)
     parser.add_argument("--extra_policy_paths", type=str, nargs="*", default=None)
 
-    parser.add_argument("--v_steps", type=int, default=20000)
-    parser.add_argument("--v_hidden_dim", type=int, default=256)
-    parser.add_argument("--v_depth", type=int, default=2)
+    parser.add_argument("--v_steps", type=int, default=2000000)
+    parser.add_argument("--value_checkpoint", type=str, default=None)
+    parser.add_argument("--v_hidden_dim", type=int, default=512)
+    parser.add_argument("--v_depth", type=int, default=3)
     parser.add_argument("--v_lr", type=float, default=1e-4)
     parser.add_argument("--v_batch_size", type=int, default=512)
 
-    parser.add_argument("--q_bc_steps", type=int, default=20000)
-    parser.add_argument("--q_hidden_dim", type=int, default=256)
+    parser.add_argument("--q_bc_steps", type=int, default=2000000)
+    parser.add_argument("--q_checkpoint", type=str, default=None)
+    parser.add_argument("--q_hidden_dim", type=int, default=1024)
     parser.add_argument("--q_depth", type=int, default=2)
     parser.add_argument("--q_lr", type=float, default=1e-4)
     parser.add_argument("--q_batch_size", type=int, default=512)
     parser.add_argument("--target_update_freq", type=int, default=2)
     parser.add_argument("--tau", type=float, default=0.005)
 
-    parser.add_argument("--bc_steps", type=int, default=10000)
+    parser.add_argument("--bc_steps", type=int, default=500000)
     parser.add_argument("--bc_checkpoint", type=str, default=None)
-    parser.add_argument("--bc_hidden_dim", type=int, default=256)
+    parser.add_argument("--bc_hidden_dim", type=int, default=1024)
     parser.add_argument("--bc_depth", type=int, default=2)
     parser.add_argument("--bc_lr", type=float, default=1e-4)
     parser.add_argument("--bc_batch_size", type=int, default=512)
 
-    parser.add_argument("--bppo_steps", type=int, default=5000)
-    parser.add_argument("--bppo_hidden_dim", type=int, default=256)
+    parser.add_argument("--bppo_steps", type=int, default=1000)
+    parser.add_argument("--bppo_hidden_dim", type=int, default=1024)
     parser.add_argument("--bppo_depth", type=int, default=2)
     parser.add_argument("--bppo_lr", type=float, default=1e-4)
     parser.add_argument("--bppo_batch_size", type=int, default=512)
@@ -179,14 +213,25 @@ def main():
     parser.add_argument("--entropy_weight", type=float, default=0.0)
     parser.add_argument("--decay", type=float, default=0.96)
     parser.add_argument("--omega", type=float, default=0.9)
-    parser.add_argument("--is_clip_decay", action="store_true")
-    parser.add_argument("--is_bppo_lr_decay", action="store_true")
-    parser.add_argument("--is_update_old_policy", action="store_true")
+    parser.add_argument("--is_clip_decay", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--is_bppo_lr_decay", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--is_update_old_policy", action=argparse.BooleanOptionalAction, default=True)
 
-    parser.add_argument("--eval_interval", type=int, default=250)
-    parser.add_argument("--checkpoint_interval", type=int, default=500)
+    parser.add_argument("--eval_interval", type=int, default=None,
+                        help="Deprecated shared fallback for both evaluation intervals.")
+    parser.add_argument("--bc_eval_interval", type=int, default=2000)
+    parser.add_argument("--bppo_eval_interval", type=int, default=1)
+    parser.add_argument("--checkpoint_interval", type=int, default=50)
     parser.add_argument("--log_interval", type=int, default=100)
     args = parser.parse_args()
+
+    if args.eval_interval is not None:
+        args.bc_eval_interval = args.eval_interval
+        args.bppo_eval_interval = args.eval_interval
+    if args.bc_eval_interval <= 0 or args.bppo_eval_interval <= 0:
+        parser.error("evaluation intervals must be positive")
+    if args.checkpoint_interval <= 0:
+        parser.error("checkpoint_interval must be positive")
 
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -197,6 +242,16 @@ def main():
     device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "cpu"))
     save_dir = Path(args.save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
+    save_json(save_dir / "training_config.json", {
+        **vars(args),
+        "resolved_device": str(device),
+        "method_fidelity": {
+            "original_stage_budgets": [2000000, 2000000, 500000, 1000],
+            "original_networks": {"value": [512, 3], "q": [1024, 2], "bc": [1024, 2], "bppo": [1024, 2]},
+            "binary_action_adaptation": True,
+            "linear_value_and_q_outputs_for_negative_cost_rewards": True,
+        },
+    })
 
     env = make_env(args.num_machines, args.horizon, args.seed, args.env_name)
     action_dim = int(np.asarray(env.action_space.sample()).shape[-1])
@@ -272,28 +327,46 @@ def main():
     value_offset = 0
     q_bc_offset = args.v_steps
     bc_offset = args.v_steps + args.q_bc_steps
+    effective_v_steps = 0 if args.value_checkpoint else args.v_steps
+    effective_q_steps = 0 if args.q_checkpoint else args.q_bc_steps
     effective_bc_steps = 0 if args.bc_checkpoint else args.bc_steps
-    bppo_offset = args.v_steps + args.q_bc_steps + effective_bc_steps
+    bppo_offset = args.v_steps + args.q_bc_steps + args.bc_steps
 
-    for step in range(1, args.v_steps + 1):
-        value_loss = value.update(replay_buffer)
-        if step % args.log_interval == 0 or step == args.v_steps:
-            loss_history.append({
-                "stage": "value",
-                "step": step,
-                "cumulative_step": value_offset + step,
-                "value_loss": float(value_loss),
-            })
+    if args.value_checkpoint:
+        value_path = Path(args.value_checkpoint).resolve()
+        if not value_path.exists():
+            raise FileNotFoundError(f"Missing value checkpoint: {value_path}")
+        value.load(str(value_path))
+    else:
+        value_path = save_dir / "value_final.pt"
+        for step in range(1, args.v_steps + 1):
+            value_loss = value.update(replay_buffer)
+            if step % args.log_interval == 0 or step == args.v_steps:
+                loss_history.append({
+                    "stage": "value",
+                    "step": step,
+                    "cumulative_step": value_offset + step,
+                    "value_loss": float(value_loss),
+                })
+        value.save(str(value_path))
 
-    for step in range(1, args.q_bc_steps + 1):
-        q_loss = q_bc.update(replay_buffer, pi=None)
-        if step % args.log_interval == 0 or step == args.q_bc_steps:
-            loss_history.append({
-                "stage": "q_bc",
-                "step": step,
-                "cumulative_step": q_bc_offset + step,
-                "q_loss": float(q_loss),
-            })
+    if args.q_checkpoint:
+        q_path = Path(args.q_checkpoint).resolve()
+        if not q_path.exists():
+            raise FileNotFoundError(f"Missing Q checkpoint: {q_path}")
+        q_bc.load(str(q_path))
+    else:
+        q_path = save_dir / "q_final.pt"
+        for step in range(1, args.q_bc_steps + 1):
+            q_loss = q_bc.update(replay_buffer, pi=None)
+            if step % args.log_interval == 0 or step == args.q_bc_steps:
+                loss_history.append({
+                    "stage": "q_bc",
+                    "step": step,
+                    "cumulative_step": q_bc_offset + step,
+                    "q_loss": float(q_loss),
+                })
+        q_bc.save(str(q_path))
 
     if args.bc_checkpoint:
         best_bc_path = Path(args.bc_checkpoint).resolve()
@@ -333,7 +406,7 @@ def main():
                     "cumulative_step": bc_offset + step,
                     "bc_loss": float(bc_loss),
                 })
-            if step % args.eval_interval == 0 or step == args.bc_steps:
+            if (step - 1) % args.bc_eval_interval == 0:
                 bc_policy_fn = make_policy_fn(bc, mean, std, device)
                 env.seed(args.eval_seed)
                 eval_stats = evaluate_policy_fn(
@@ -363,6 +436,44 @@ def main():
     bppo.load(str(best_bc_path))
     bppo.set_old_policy()
 
+    # The original implementation compares every BPPO update against the
+    # behavior-cloned starting policy, rather than accepting update 1 by default.
+    initial_policy_fn = make_policy_fn(bppo, mean, std, device)
+    env.seed(args.eval_seed)
+    initial_eval_stats = evaluate_policy_fn(
+        initial_policy_fn,
+        env,
+        args.episodes,
+        discount=args.discount,
+        reference_policy=reference_policy,
+        extra_reference_policies=extra_reference_policies,
+        env_name=args.env_name,
+    )
+    best_cost = float(initial_eval_stats["discounted_cost"])
+    latest_best_dir = save_dir / "checkpoints" / "best"
+    latest_best_dir.mkdir(parents=True, exist_ok=True)
+    bppo.save(str(latest_best_dir / "policy.pt"))
+    np.savez(latest_best_dir / "normalization.npz", mean=mean, std=std)
+    save_json(
+        latest_best_dir / "metadata.json",
+        policy_checkpoint_metadata(args, 0, state_dim, action_dim),
+    )
+    best_payload = {
+        "best_step": 0,
+        "best_return": float(-best_cost),
+        "best_cost": float(best_cost),
+        "checkpoint_dir": str(latest_best_dir),
+    }
+    save_json(save_dir / "best_checkpoint.json", best_payload)
+    eval_history.append(summarize_eval(
+        0,
+        initial_eval_stats,
+        checkpoint_dir=str(latest_best_dir),
+        is_best=True,
+        stage="bppo_initial_bc",
+        cumulative_step=bppo_offset,
+    ))
+
     for step in range(1, args.bppo_steps + 1):
         bppo_loss = bppo.update(
             replay_buffer,
@@ -379,7 +490,7 @@ def main():
                 "bppo_loss": float(bppo_loss),
             })
 
-        if step % args.eval_interval == 0 or step == args.bppo_steps:
+        if step % args.bppo_eval_interval == 0 or step == args.bppo_steps:
             policy_fn = make_policy_fn(bppo, mean, std, device)
             env.seed(args.eval_seed)
             eval_stats = evaluate_policy_fn(
@@ -391,54 +502,37 @@ def main():
                 extra_reference_policies=extra_reference_policies,
                 env_name=args.env_name,
             )
-            checkpoint_dir = str(save_policy_checkpoint(
-                save_dir,
-                step,
-                bppo,
-                mean,
-                std,
-                {
-                    "env_name": args.env_name,
-                    "num_machines": args.num_machines,
-                    "horizon": args.horizon,
-                    "seed": args.seed,
-                    "eval_seed": args.eval_seed,
-                    "checkpoint_step": step,
-                    "state_dim": state_dim,
-                    "action_dim": action_dim,
-                    "policy_hidden_dim": args.bppo_hidden_dim,
-                    "policy_depth": args.bppo_depth,
-                    "state_norm": bool(args.is_state_norm),
-                    "reward_scale": float(args.reward_scale),
-                },
-            ))
-            is_best = False
-            row = summarize_eval(step, eval_stats, checkpoint_dir=checkpoint_dir, is_best=False)
-            row["stage"] = "bppo"
-            row["cumulative_step"] = bppo_offset + step
-            eval_history.append(row)
-            if float(eval_stats["discounted_cost"]) < best_cost:
-                best_cost = float(eval_stats["discounted_cost"])
-                is_best = True
-                row["is_best_so_far"] = True
+            cost = float(eval_stats["discounted_cost"])
+            is_best = cost < best_cost
+            checkpoint_metadata = policy_checkpoint_metadata(
+                args, step, state_dim, action_dim)
+            should_save = step % args.checkpoint_interval == 0 or step == args.bppo_steps
+            checkpoint_dir = None
+            if should_save:
+                checkpoint_dir = str(save_policy_checkpoint(
+                    save_dir, step, bppo, mean, std, checkpoint_metadata,
+                ))
+            if is_best:
+                best_cost = cost
+                latest_best_dir = save_dir / "checkpoints" / "best"
+                latest_best_dir.mkdir(parents=True, exist_ok=True)
+                bppo.save(str(latest_best_dir / "policy.pt"))
+                np.savez(latest_best_dir / "normalization.npz", mean=mean, std=std)
+                save_json(latest_best_dir / "metadata.json", checkpoint_metadata)
                 best_payload = {
                     "best_step": int(step),
                     "best_return": float(-best_cost),
                     "best_cost": float(best_cost),
-                    "checkpoint_dir": checkpoint_dir,
+                    "checkpoint_dir": str(latest_best_dir),
                 }
                 save_json(save_dir / "best_checkpoint.json", best_payload)
-                if checkpoint_dir:
-                    latest_best_dir = save_dir / "checkpoints" / "best"
-                    latest_best_dir.mkdir(parents=True, exist_ok=True)
-                    bppo.save(str(latest_best_dir / "policy.pt"))
-                    np.savez(latest_best_dir / "normalization.npz", mean=mean, std=std)
-                    save_json(latest_best_dir / "metadata.json", {
-                        "best_step": int(step),
-                        "source_checkpoint_dir": checkpoint_dir,
-                    })
+                checkpoint_dir = str(latest_best_dir)
                 if args.is_update_old_policy:
                     bppo.set_old_policy()
+            row = summarize_eval(step, eval_stats, checkpoint_dir=checkpoint_dir, is_best=is_best)
+            row["stage"] = "bppo"
+            row["cumulative_step"] = bppo_offset + step
+            eval_history.append(row)
 
     total_wall_time = time.perf_counter() - start_time
     save_json(save_dir / f"{args.seed}_loss.json", loss_history)
@@ -450,11 +544,20 @@ def main():
         "dataset_path": args.dataset_path,
         "reward_scale": float(args.reward_scale),
         "v_steps": args.v_steps,
+        "v_steps_executed": effective_v_steps,
+        "value_checkpoint": str(value_path),
         "q_bc_steps": args.q_bc_steps,
+        "q_bc_steps_executed": effective_q_steps,
+        "q_checkpoint": str(q_path),
         "bc_steps": args.bc_steps,
         "bc_steps_executed": effective_bc_steps,
-        "bc_checkpoint": str(best_bc_path) if args.bc_checkpoint else None,
+        "bc_checkpoint": str(best_bc_path),
         "bppo_steps": args.bppo_steps,
+        "bc_eval_interval": args.bc_eval_interval,
+        "bppo_eval_interval": args.bppo_eval_interval,
+        "is_clip_decay": bool(args.is_clip_decay),
+        "is_bppo_lr_decay": bool(args.is_bppo_lr_decay),
+        "is_update_old_policy": bool(args.is_update_old_policy),
     })
     if best_payload is None:
         save_json(save_dir / "best_checkpoint.json", {

@@ -66,18 +66,19 @@ def main() -> None:
     parser.add_argument("--discount", type=float, default=0.95)
     parser.add_argument("--dataset_seed", type=int, default=42)
     parser.add_argument("--seeds", default="123")
-    parser.add_argument("--eval_episodes", type=int, default=25)
+    parser.add_argument("--eval_episodes", type=int, default=10)
     parser.add_argument("--eval_seed", type=int, default=10000)
     parser.add_argument("--reeval_episodes", type=int, default=200)
     parser.add_argument("--reeval_seed", type=int, default=20000)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--reward_scale", type=float, default=1.0)
-    parser.add_argument("--v_steps", type=int, default=20000)
-    parser.add_argument("--q_bc_steps", type=int, default=20000)
-    parser.add_argument("--bc_steps", type=int, default=10000)
-    parser.add_argument("--bppo_steps", type=int, default=5000)
-    parser.add_argument("--eval_interval", type=int, default=250)
-    parser.add_argument("--checkpoint_interval", type=int, default=500)
+    parser.add_argument("--v_steps", type=int, default=2000000)
+    parser.add_argument("--q_bc_steps", type=int, default=2000000)
+    parser.add_argument("--bc_steps", type=int, default=500000)
+    parser.add_argument("--bppo_steps", type=int, default=1000)
+    parser.add_argument("--bc_eval_interval", type=int, default=2000)
+    parser.add_argument("--bppo_eval_interval", type=int, default=1)
+    parser.add_argument("--checkpoint_interval", type=int, default=50)
     parser.add_argument("--prepare_only", action="store_true")
     parser.add_argument("--skip_train", action="store_true")
     parser.add_argument("--skip_missing_datasets", action="store_true")
@@ -190,24 +191,24 @@ def main() -> None:
                                 "--extra_policy_paths",
                                 *[str(path) for path in study.extra_policy_paths],
                                 "--v_steps", str(args.v_steps),
-                                "--v_hidden_dim", "256",
-                                "--v_depth", "2",
+                                "--v_hidden_dim", "512",
+                                "--v_depth", "3",
                                 "--v_lr", "0.0001",
                                 "--v_batch_size", "512",
                                 "--q_bc_steps", str(args.q_bc_steps),
-                                "--q_hidden_dim", "256",
+                                "--q_hidden_dim", "1024",
                                 "--q_depth", "2",
                                 "--q_lr", "0.0001",
                                 "--q_batch_size", "512",
                                 "--target_update_freq", "2",
                                 "--tau", "0.005",
                                 "--bc_steps", str(args.bc_steps),
-                                "--bc_hidden_dim", "256",
+                                "--bc_hidden_dim", "1024",
                                 "--bc_depth", "2",
                                 "--bc_lr", "0.0001",
                                 "--bc_batch_size", "512",
                                 "--bppo_steps", str(args.bppo_steps),
-                                "--bppo_hidden_dim", "256",
+                                "--bppo_hidden_dim", "1024",
                                 "--bppo_depth", "2",
                                 "--bppo_lr", "0.0001",
                                 "--bppo_batch_size", "512",
@@ -215,7 +216,11 @@ def main() -> None:
                                 "--entropy_weight", "0.0",
                                 "--decay", "0.96",
                                 "--omega", "0.9",
-                                "--eval_interval", str(args.eval_interval),
+                                "--is_clip_decay",
+                                "--is_bppo_lr_decay",
+                                "--is_update_old_policy",
+                                "--bc_eval_interval", str(args.bc_eval_interval),
+                                "--bppo_eval_interval", str(args.bppo_eval_interval),
                                 "--checkpoint_interval", str(args.checkpoint_interval),
                                 "--log_interval", "100",
                             ], repo_root)

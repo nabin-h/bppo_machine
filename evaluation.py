@@ -4,7 +4,27 @@ from typing import Any, Callable, Dict, Optional
 import gym
 import numpy as np
 
-from custom_env import DEFAULT_ENV_NAME, project_action, split_observation
+from custom_env import DEFAULT_ENV_NAME, get_env_spec, project_action, split_observation
+
+
+def classify_action_corrections(observation, raw_action, projected_action,
+                                env_name: str = DEFAULT_ENV_NAME) -> Dict[str, int]:
+    """Explain projection changes without changing the policy or environment action."""
+    raw = np.asarray(raw_action, dtype=np.int32).reshape(-1)
+    projected = np.asarray(projected_action, dtype=np.int32).reshape(-1)
+    component_states = np.asarray(
+        split_observation(observation, env_name=env_name)[0], dtype=np.int32
+    ).reshape(-1)
+    failed_state = int(get_env_spec(env_name)["failed_state"])
+    changed = raw != projected
+    forced_failure = changed & (component_states == failed_state) & (raw == 0) & (projected == 1)
+    suppressed_zero = changed & (component_states == 0) & (raw == 1) & (projected == 0)
+    return {
+        "corrections": int(np.sum(changed)),
+        "forced_failure_corrections": int(np.sum(forced_failure)),
+        "suppressed_zero_state_corrections": int(np.sum(suppressed_zero)),
+        "other_corrections": int(np.sum(changed & ~forced_failure & ~suppressed_zero)),
+    }
 
 
 def load_reference_policy(policy_path: str):
@@ -114,6 +134,9 @@ def evaluate(agent: Any, env: gym.Env,
         discounted_return = 0.0
         discounted_cost = 0.0
         episode_corrections = 0
+        episode_forced_failure_corrections = 0
+        episode_suppressed_zero_state_corrections = 0
+        episode_other_corrections = 0
         projected_full_match_count = {}
         raw_full_match_count = {}
         episode_steps = 0
@@ -139,7 +162,12 @@ def evaluate(agent: Any, env: gym.Env,
                 observation, temperature=0.0)  # 0.0 greedy action
             raw_action_arr = np.asarray(raw_action, dtype=np.int32)
             action_arr = project_action(observation, raw_action_arr, env_name=env_name).astype(np.float32)
-            episode_corrections += int(np.sum(raw_action_arr != action_arr.astype(np.int32)))
+            correction_counts = classify_action_corrections(
+                observation, raw_action_arr, action_arr, env_name=env_name)
+            episode_corrections += correction_counts["corrections"]
+            episode_forced_failure_corrections += correction_counts["forced_failure_corrections"]
+            episode_suppressed_zero_state_corrections += correction_counts["suppressed_zero_state_corrections"]
+            episode_other_corrections += correction_counts["other_corrections"]
             action_sum.append(action_arr)
             action_count += action_arr.size
             observation, reward, done, info = env.step(action_arr)
@@ -170,6 +198,12 @@ def evaluate(agent: Any, env: gym.Env,
         stats['discounted_cost'].append(discounted_cost)
         stats.setdefault('corrections', [])
         stats['corrections'].append(float(episode_corrections))
+        stats.setdefault('forced_failure_corrections', [])
+        stats['forced_failure_corrections'].append(float(episode_forced_failure_corrections))
+        stats.setdefault('suppressed_zero_state_corrections', [])
+        stats['suppressed_zero_state_corrections'].append(float(episode_suppressed_zero_state_corrections))
+        stats.setdefault('other_corrections', [])
+        stats['other_corrections'].append(float(episode_other_corrections))
         stats.setdefault('raw_invalid_action_count', [])
         stats['raw_invalid_action_count'].append(float(episode_corrections))
         stats.setdefault('raw_invalid_action_rate', [])
@@ -178,6 +212,15 @@ def evaluate(agent: Any, env: gym.Env,
             float(episode_corrections) / total_action_decisions
             if total_action_decisions > 0 else np.nan)
         stats['raw_invalid_action_rate'].append(invalid_action_rate)
+        for key, count in (
+            ('forced_failure_correction_rate', episode_forced_failure_corrections),
+            ('suppressed_zero_state_correction_rate', episode_suppressed_zero_state_corrections),
+            ('other_correction_rate', episode_other_corrections),
+        ):
+            stats.setdefault(key, [])
+            stats[key].append(
+                float(count) / total_action_decisions
+                if total_action_decisions > 0 else np.nan)
         if episode_steps > 0:
             for label in all_reference_policies:
                 match_trackers[label]["raw_full_matches"].append(
@@ -258,6 +301,9 @@ def evaluate_policy_fn(policy_fn: Callable[[np.ndarray], np.ndarray],
         discounted_return = 0.0
         discounted_cost = 0.0
         episode_corrections = 0
+        episode_forced_failure_corrections = 0
+        episode_suppressed_zero_state_corrections = 0
+        episode_other_corrections = 0
         projected_full_match_count = {}
         raw_full_match_count = {}
         episode_steps = 0
@@ -282,7 +328,12 @@ def evaluate_policy_fn(policy_fn: Callable[[np.ndarray], np.ndarray],
             raw_action = policy_fn(observation)
             raw_action_arr = np.asarray(raw_action, dtype=np.int32)
             action_arr = project_action(observation, raw_action_arr, env_name=env_name).astype(np.float32)
-            episode_corrections += int(np.sum(raw_action_arr != action_arr.astype(np.int32)))
+            correction_counts = classify_action_corrections(
+                observation, raw_action_arr, action_arr, env_name=env_name)
+            episode_corrections += correction_counts["corrections"]
+            episode_forced_failure_corrections += correction_counts["forced_failure_corrections"]
+            episode_suppressed_zero_state_corrections += correction_counts["suppressed_zero_state_corrections"]
+            episode_other_corrections += correction_counts["other_corrections"]
             action_sum.append(action_arr)
             action_count += action_arr.size
             observation, reward, done, info = env.step(action_arr)
@@ -313,6 +364,12 @@ def evaluate_policy_fn(policy_fn: Callable[[np.ndarray], np.ndarray],
         stats['discounted_cost'].append(discounted_cost)
         stats.setdefault('corrections', [])
         stats['corrections'].append(float(episode_corrections))
+        stats.setdefault('forced_failure_corrections', [])
+        stats['forced_failure_corrections'].append(float(episode_forced_failure_corrections))
+        stats.setdefault('suppressed_zero_state_corrections', [])
+        stats['suppressed_zero_state_corrections'].append(float(episode_suppressed_zero_state_corrections))
+        stats.setdefault('other_corrections', [])
+        stats['other_corrections'].append(float(episode_other_corrections))
         stats.setdefault('raw_invalid_action_count', [])
         stats['raw_invalid_action_count'].append(float(episode_corrections))
         stats.setdefault('raw_invalid_action_rate', [])
@@ -321,6 +378,15 @@ def evaluate_policy_fn(policy_fn: Callable[[np.ndarray], np.ndarray],
             float(episode_corrections) / total_action_decisions
             if total_action_decisions > 0 else np.nan)
         stats['raw_invalid_action_rate'].append(invalid_action_rate)
+        for key, count in (
+            ('forced_failure_correction_rate', episode_forced_failure_corrections),
+            ('suppressed_zero_state_correction_rate', episode_suppressed_zero_state_corrections),
+            ('other_correction_rate', episode_other_corrections),
+        ):
+            stats.setdefault(key, [])
+            stats[key].append(
+                float(count) / total_action_decisions
+                if total_action_decisions > 0 else np.nan)
         if episode_steps > 0:
             for label in all_reference_policies:
                 match_trackers[label]["raw_full_matches"].append(
