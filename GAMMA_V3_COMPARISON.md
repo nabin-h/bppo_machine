@@ -8,7 +8,9 @@ The gamma-v3 adaptation now matches the original BPPO training recipe wherever t
 - BPPO: 1,000 updates, 1024-wide, depth 2;
 - learning rate `1e-4`, batch size 512, target update frequency 2, `tau=0.005`, `omega=0.9`, and zero entropy weight;
 - clip and BPPO learning-rate decay for the first 200 updates;
-- evaluation after every BPPO update and replacement of the old policy whenever evaluation improves.
+- replacement of the old policy whenever a scheduled evaluation improves. The
+  tuning sweep evaluates every BPPO update; the full-suite seed runs evaluate
+  every 20 BPPO updates to avoid unnecessary simulator overhead.
 
 The intentional adaptations are a factorized Bernoulli policy for the binary multi-action space, linear value/Q outputs for negative-cost rewards, and benchmark discount `gamma=0.95`. Environment action projection remains outside the policy, as before, but evaluation now reports forced-failure, suppressed-zero-state, and other correction counts and rates separately.
 
@@ -33,5 +35,10 @@ python scripts\run_gamma_v3_bppo_faithful_full.py --device cuda --resume --skip_
 ```
 
 It uses the exact datasets in the sibling `dt_machine` repository and validates environment name, system size, horizon, discount, dataset seed, setup cost, and reward convention before training. Both the author-style selected checkpoint and the final step-1000 checkpoint are independently evaluated for 200 episodes with seed 20000. The selected checkpoint is the primary reported result.
+
+For the full suite, BC evaluation remains every 2,000 updates and BPPO
+evaluation occurs every 20 updates (50 BPPO evaluations rather than 1,000).
+Override these only when a different monitoring schedule is intentionally
+required, using `--bc_eval_interval` and `--bppo_eval_interval`.
 
 Results are isolated below `Seed runs/gamma_v3_bppo_faithful_full`. With `--resume`, completed studies are skipped; interrupted runs reuse completed value, Q, and BC stages and restart only the short BPPO stage when necessary. With `--skip_missing_datasets`, missing inputs are recorded in `missing_datasets.json` and the remaining studies continue.

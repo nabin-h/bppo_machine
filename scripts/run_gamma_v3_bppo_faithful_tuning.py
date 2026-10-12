@@ -65,6 +65,8 @@ def training_command(
     value_checkpoint: Path | None = None,
     q_checkpoint: Path | None = None,
     bc_checkpoint: Path | None = None,
+    bc_eval_interval: int = 2000,
+    bppo_eval_interval: int = 1,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -94,7 +96,8 @@ def training_command(
         "--clip_ratio", str(clip_ratio), "--entropy_weight", "0.0",
         "--decay", str(decay), "--omega", "0.9",
         "--is_clip_decay", "--is_bppo_lr_decay", "--is_update_old_policy",
-        "--bc_eval_interval", "2000", "--bppo_eval_interval", "1",
+        "--bc_eval_interval", str(bc_eval_interval),
+        "--bppo_eval_interval", str(bppo_eval_interval),
         "--checkpoint_interval", "50", "--log_interval", "100",
     ]
     if value_checkpoint is not None:

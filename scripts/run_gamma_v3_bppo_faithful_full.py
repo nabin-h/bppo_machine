@@ -28,6 +28,8 @@ from scripts.run_gamma_v3_bppo_faithful_tuning import (
 
 FROZEN_CLIP_RATIO = 0.25
 FROZEN_DECAY = 0.96
+DEFAULT_BC_EVAL_INTERVAL = 2000
+DEFAULT_BPPO_EVAL_INTERVAL = 20
 
 
 def summarize(values: list[float]) -> dict[str, float]:
@@ -77,6 +79,10 @@ def main() -> None:
     parser.add_argument("--seeds", default="123")
     parser.add_argument("--eval_episodes", type=int, default=10)
     parser.add_argument("--eval_seed", type=int, default=10000)
+    parser.add_argument(
+        "--bc_eval_interval", type=int, default=DEFAULT_BC_EVAL_INTERVAL)
+    parser.add_argument(
+        "--bppo_eval_interval", type=int, default=DEFAULT_BPPO_EVAL_INTERVAL)
     parser.add_argument("--reeval_episodes", type=int, default=200)
     parser.add_argument("--reeval_seed", type=int, default=20000)
     parser.add_argument("--device", default="cuda")
@@ -86,6 +92,8 @@ def main() -> None:
     parser.add_argument("--skip_missing_datasets", action="store_true")
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
+    if args.bc_eval_interval <= 0 or args.bppo_eval_interval <= 0:
+        parser.error("evaluation intervals must be positive")
 
     repo_root = Path(__file__).resolve().parents[1]
     dt_repo = (repo_root / args.dt_repo).resolve()
@@ -162,11 +170,15 @@ def main() -> None:
             "clip_decay_first_steps": 200,
             "lr_decay_first_steps": 200,
             "update_old_policy_on_improvement": True,
-            "bppo_eval_interval": 1,
+            "bc_eval_interval": args.bc_eval_interval,
+            "bppo_eval_interval": args.bppo_eval_interval,
         },
         "stage_budgets": ORIGINAL_BUDGETS,
         "networks": ORIGINAL_NETWORKS,
-        "checkpoint_selection": "minimum 10-episode BPPO evaluation cost, including the initial BC policy",
+        "checkpoint_selection": (
+            f"minimum {args.eval_episodes}-episode cost over scheduled BPPO evaluations, "
+            "including the initial BC policy"
+        ),
         "primary_report": "selected checkpoint reevaluated for 200 episodes",
         "secondary_report": "final step-1000 checkpoint reevaluated for 200 episodes",
     }
@@ -233,6 +245,8 @@ def main() -> None:
                     value_checkpoint=value_checkpoint,
                     q_checkpoint=q_checkpoint,
                     bc_checkpoint=bc_checkpoint,
+                    bc_eval_interval=args.bc_eval_interval,
+                    bppo_eval_interval=args.bppo_eval_interval,
                 ), repo_root)
 
             best_path = run_dir / "best_checkpoint.json"
