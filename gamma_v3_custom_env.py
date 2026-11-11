@@ -369,8 +369,12 @@ ENV_SPECS: Dict[str, Dict[str, object]] = {
 
 ENV_SPECS["gamma_v3_cs500"] = {**ENV_SPECS["gamma_v3"], "cs": 500.0}
 ENV_SPECS["gamma_v3_cs1000"] = {**ENV_SPECS["gamma_v3"], "cs": 1000.0}
+ENV_SPECS["gamma_v3_cs25"] = {**ENV_SPECS["gamma_v3"], "cs": 25.0}
+ENV_SPECS["gamma_v3_cs50"] = {**ENV_SPECS["gamma_v3"], "cs": 50.0}
 ENV_SPECS["gamma_v3_cs100"] = {**ENV_SPECS["gamma_v3"], "cs": 100.0}
+ENV_SPECS["gamma_v3_cs125"] = {**ENV_SPECS["gamma_v3"], "cs": 125.0}
 ENV_SPECS["gamma_v3_cs200"] = {**ENV_SPECS["gamma_v3"], "cs": 200.0}
+ENV_SPECS["gamma_v3_cs250"] = {**ENV_SPECS["gamma_v3"], "cs": 250.0}
 
 _GAMMA_V3_HETERO_TRANSITIONS = {
     "slow": _GAMMA_V3_HETERO_SLOW_P,
@@ -408,6 +412,20 @@ ENV_SPECS["gamma_v3_hetero_cs5n_m20"] = {
     "expected_num_machines": 20,
     "degradation_model": _GAMMA_V3_HETERO_DEGRADATION,
 }
+ENV_SPECS["gamma_v3_hetero_cs5n_m5"] = {
+    **ENV_SPECS["gamma_v3_cs25"],
+    "transition_no_maintenance_by_class": _GAMMA_V3_HETERO_TRANSITIONS,
+    "component_classes": ("slow",) * 2 + ("medium",) * 2 + ("fast",),
+    "expected_num_machines": 5,
+    "degradation_model": _GAMMA_V3_HETERO_DEGRADATION,
+}
+ENV_SPECS["gamma_v3_hetero_cs5n_m10"] = {
+    **ENV_SPECS["gamma_v3_cs50"],
+    "transition_no_maintenance_by_class": _GAMMA_V3_HETERO_TRANSITIONS,
+    "component_classes": ("slow",) * 4 + ("medium",) * 3 + ("fast",) * 3,
+    "expected_num_machines": 10,
+    "degradation_model": _GAMMA_V3_HETERO_DEGRADATION,
+}
 ENV_SPECS["gamma_v3_hetero_cs5n_m40"] = {
     **ENV_SPECS["gamma_v3_cs200"],
     "transition_no_maintenance_by_class": _GAMMA_V3_HETERO_TRANSITIONS,
@@ -416,6 +434,20 @@ ENV_SPECS["gamma_v3_hetero_cs5n_m40"] = {
     "degradation_model": _GAMMA_V3_HETERO_DEGRADATION,
 }
 
+ENV_SPECS["gamma_v3_hetero_cs25n_m5"] = {
+    **ENV_SPECS["gamma_v3_cs125"],
+    "transition_no_maintenance_by_class": _GAMMA_V3_HETERO_TRANSITIONS,
+    "component_classes": ("slow",) * 2 + ("medium",) * 2 + ("fast",),
+    "expected_num_machines": 5,
+    "degradation_model": _GAMMA_V3_HETERO_DEGRADATION,
+}
+ENV_SPECS["gamma_v3_hetero_cs25n_m10"] = {
+    **ENV_SPECS["gamma_v3_cs250"],
+    "transition_no_maintenance_by_class": _GAMMA_V3_HETERO_TRANSITIONS,
+    "component_classes": ("slow",) * 4 + ("medium",) * 3 + ("fast",) * 3,
+    "expected_num_machines": 10,
+    "degradation_model": _GAMMA_V3_HETERO_DEGRADATION,
+}
 ENV_SPECS["gamma_v3_hetero_cs25n_m20"] = {
     **ENV_SPECS["gamma_v3_cs500"],
     "transition_no_maintenance_by_class": _GAMMA_V3_HETERO_TRANSITIONS,
